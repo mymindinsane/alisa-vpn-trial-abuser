@@ -1,4 +1,4 @@
-# VPN Link App
+# Alisa Trial Abuser
 
 This app opens a registration page, fills in the required details, selects
 Windows, and shows the received VPN link in the app window.
@@ -15,7 +15,7 @@ permission.
 Unzip the app archive and open:
 
 ```text
-vpn-link-gui.exe
+alisa-trial-abuser.exe
 ```
 
 The app first tries to use Microsoft Edge. If Edge is not available, it tries
@@ -24,7 +24,7 @@ Chromium on this computer.
 
 ## How To Use
 
-1. Open `vpn-link-gui.exe`.
+1. Open `alisa-trial-abuser.exe`.
 2. Check the fields in the `Settings` section.
 3. Enable `Show browser window` if you want to see the browser.
 4. Click `Start`.
