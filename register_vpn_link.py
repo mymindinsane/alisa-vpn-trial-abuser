@@ -1,5 +1,6 @@
 import argparse
 import os
+import subprocess
 import random
 import re
 import sys
@@ -19,6 +20,8 @@ PASSWORD = "Qwerty12345!"
 EMAIL_PREFIX = "qwerty"
 EMAIL_DOMAIN = "mail.ru"
 DEVICE_TEXT = "Windows"
+BROWSER_CHANNEL = "auto"
+DOWNLOAD_CHROMIUM_IF_NEEDED = True
 
 # HEADFUL controls whether the browser window is visible.
 # False = run in the background, True = show Chromium on screen.
@@ -57,6 +60,8 @@ def parse_args():
     parser.add_argument("--email-prefix", default=EMAIL_PREFIX)
     parser.add_argument("--email-domain", default=EMAIL_DOMAIN)
     parser.add_argument("--device-text", default=DEVICE_TEXT)
+    parser.add_argument("--browser-channel", default=BROWSER_CHANNEL, choices=("auto", "msedge", "chrome", "chromium"))
+    parser.add_argument("--no-download-chromium", action="store_false", dest="download_chromium_if_needed", default=DOWNLOAD_CHROMIUM_IF_NEEDED)
     parser.add_argument("--headful", action="store_true", default=HEADFUL)
     parser.add_argument("--timeout-ms", type=int, default=TIMEOUT_MS)
     parser.add_argument("--email-selector", default=EMAIL_SELECTOR)
@@ -75,6 +80,8 @@ def default_settings():
         email_prefix=EMAIL_PREFIX,
         email_domain=EMAIL_DOMAIN,
         device_text=DEVICE_TEXT,
+        browser_channel=BROWSER_CHANNEL,
+        download_chromium_if_needed=DOWNLOAD_CHROMIUM_IF_NEEDED,
         headful=HEADFUL,
         timeout_ms=TIMEOUT_MS,
         email_selector=EMAIL_SELECTOR,
@@ -153,14 +160,92 @@ def extract_link(page, args) -> Optional[str]:
     return first_link_from_text(page.locator("body").inner_text())
 
 
+def launch_browser(playwright, args, log):
+    """Launch a browser. Download Chromium only after system browsers fail."""
+    headless = not args.headful
+
+    if args.browser_channel == "chromium":
+        return launch_playwright_chromium(playwright, headless, args.download_chromium_if_needed, log)
+
+    browser, errors = try_launch_system_browser(playwright, args.browser_channel, headless, log)
+    if browser:
+        return browser
+
+    if args.download_chromium_if_needed and args.browser_channel == "auto":
+        log("Edge and Chrome are not available. Falling back to Playwright Chromium download.")
+        return launch_playwright_chromium(playwright, headless, True, log)
+
+    raise RuntimeError("Could not launch Microsoft Edge or Google Chrome.\n" + "\n".join(errors))
+
+
+def try_launch_system_browser(playwright, browser_channel, headless, log):
+    """Try installed Edge/Chrome only. Never downloads anything."""
+    channels = ("msedge", "chrome") if browser_channel == "auto" else (browser_channel,)
+    errors = []
+
+    for channel in channels:
+        try:
+            log(f"Trying installed browser: {channel}")
+            return playwright.chromium.launch(channel=channel, headless=headless), errors
+        except PlaywrightError as exc:
+            errors.append(f"{channel}: {exc}")
+
+    return None, errors
+
+
+def launch_playwright_chromium(playwright, headless, download_if_missing, log):
+    """Launch Playwright Chromium, downloading it first only when allowed."""
+    try:
+        log("Trying Playwright Chromium...")
+        return playwright.chromium.launch(headless=headless)
+    except PlaywrightError:
+        if not download_if_missing:
+            raise
+
+        install_playwright_chromium(log)
+        log("Trying Playwright Chromium after download...")
+        return playwright.chromium.launch(headless=headless)
+
+
+def install_playwright_chromium(log):
+    """Download Playwright Chromium on the user's machine."""
+    log("Downloading Playwright Chromium. This can take a few minutes...")
+
+    if getattr(sys, "frozen", False):
+        from playwright.__main__ import main as playwright_main
+
+        old_argv = sys.argv[:]
+        try:
+            sys.argv = ["playwright", "install", "chromium"]
+            try:
+                result = playwright_main()
+            except SystemExit as exc:
+                result = exc.code
+        finally:
+            sys.argv = old_argv
+
+        if result not in (None, 0):
+            raise RuntimeError("Playwright Chromium download failed.")
+        return
+
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=False,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError("Playwright Chromium download failed.")
+
+
 def run_registration_flow(args, log=print):
     """Run the browser flow once and return the generated email and found link."""
     configure_packaged_browser_path()
     email = generate_email(args)
 
     with sync_playwright() as p:
-        # Launch Chromium and create a fresh tab/page.
-        browser = p.chromium.launch(headless=not args.headful)
+        # Launch a system browser and create a fresh tab/page.
+        browser = launch_browser(p, args, log)
         page = browser.new_page()
         page.set_default_timeout(args.timeout_ms)
 

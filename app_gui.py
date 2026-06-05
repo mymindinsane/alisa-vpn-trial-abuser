@@ -19,6 +19,8 @@ class App(tk.Tk):
         self.email_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
         self.headful_var = tk.BooleanVar(value=self.settings.headful)
+        self.browser_channel_var = tk.StringVar(value=self.settings.browser_channel)
+        self.download_chromium_var = tk.BooleanVar(value=self.settings.download_chromium_if_needed)
 
         self.inputs = {}
 
@@ -42,8 +44,20 @@ class App(tk.Tk):
         self._add_input(form, "Timeout ms", "timeout_ms", str(self.settings.timeout_ms), 5)
         self._add_input(form, "Link selector", "link_selector", self.settings.link_selector or "", 6)
 
+        ttk.Label(form, text="Browser").grid(row=7, column=0, sticky="w", padx=(0, 10), pady=4)
+        browser = ttk.Combobox(
+            form,
+            textvariable=self.browser_channel_var,
+            values=("auto", "msedge", "chrome", "chromium"),
+            state="readonly",
+        )
+        browser.grid(row=7, column=1, sticky="ew", pady=4)
+
         headful = ttk.Checkbutton(form, text="Show browser window", variable=self.headful_var)
-        headful.grid(row=7, column=1, sticky="w", pady=(8, 0))
+        headful.grid(row=8, column=1, sticky="w", pady=(8, 0))
+
+        download = ttk.Checkbutton(form, text="Download Chromium if needed", variable=self.download_chromium_var)
+        download.grid(row=9, column=1, sticky="w", pady=(4, 0))
 
         form.columnconfigure(1, weight=1)
 
@@ -95,6 +109,8 @@ class App(tk.Tk):
         settings.email_prefix = self.inputs["email_prefix"].get().strip()
         settings.email_domain = self.inputs["email_domain"].get().strip()
         settings.device_text = self.inputs["device_text"].get().strip()
+        settings.browser_channel = self.browser_channel_var.get()
+        settings.download_chromium_if_needed = self.download_chromium_var.get()
         settings.headful = self.headful_var.get()
         settings.link_selector = self.inputs["link_selector"].get().strip() or None
 

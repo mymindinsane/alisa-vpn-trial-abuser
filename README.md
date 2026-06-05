@@ -18,13 +18,9 @@ Unzip the app archive and open:
 vpn-link-gui.exe
 ```
 
-Do not delete this folder:
-
-```text
-ms-playwright
-```
-
-The app needs it to run the bundled browser.
+The app first tries to use Microsoft Edge. If Edge is not available, it tries
+Google Chrome. If neither browser is available, the app can download Playwright
+Chromium on this computer.
 
 ## How To Use
 
@@ -46,6 +42,13 @@ The app needs it to run the bundled browser.
 `Email domain` - domain of the generated email address.
 
 `Device text` - text used to select the Windows option.
+
+`Browser` - browser used by the app. `auto` tries Edge first, then Chrome.
+
+`Show browser window` - shows the browser while the app is running.
+
+`Download Chromium if needed` - downloads Playwright Chromium if Edge and Chrome
+are not available. Internet connection is required for this download.
 
 `Timeout ms` - maximum wait time for page actions.
 
@@ -77,4 +80,3 @@ no_vpn_link_found.png
 
 Use the screenshot to check what was visible in the browser when the error
 happened.
-
