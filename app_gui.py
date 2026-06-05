@@ -10,7 +10,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("VPN Link")
+        self.title("Alisa Trial Abuser")
         self.geometry("760x560")
         self.minsize(680, 500)
 
@@ -30,7 +30,7 @@ class App(tk.Tk):
         root = ttk.Frame(self, padding=16)
         root.pack(fill="both", expand=True)
 
-        title = ttk.Label(root, text="VPN Link", font=("Segoe UI", 18, "bold"))
+        title = ttk.Label(root, text="Alisa Trial Abuser", font=("Segoe UI", 18, "bold"))
         title.pack(anchor="w")
 
         form = ttk.LabelFrame(root, text="Settings", padding=12)

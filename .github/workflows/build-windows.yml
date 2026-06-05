@@ -27,18 +27,18 @@ jobs:
 
       - name: Build GUI executable
         run: |
-          pyinstaller --clean --onedir --windowed --collect-all playwright --name vpn-link-gui app_gui.py
+          pyinstaller --clean --onedir --windowed --collect-all playwright --name alisa-trial-abuser app_gui.py
 
       - name: Add run script
         shell: pwsh
         run: |
           @"
           @echo off
-          start "" "%~dp0vpn-link-gui.exe"
-          "@ | Set-Content -Path "dist\vpn-link-gui\run-gui.bat" -Encoding ASCII
+          start "" "%~dp0alisa-trial-abuser.exe"
+          "@ | Set-Content -Path "dist\alisa-trial-abuser\run-alisa-trial-abuser.bat" -Encoding ASCII
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vpn-link-gui-windows
-          path: dist/vpn-link-gui
+          name: alisa-trial-abuser-windows
+          path: dist/alisa-trial-abuser
