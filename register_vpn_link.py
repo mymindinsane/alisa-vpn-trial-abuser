@@ -1,8 +1,11 @@
 import argparse
+import os
 import random
 import re
+import sys
 import string
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 from playwright.sync_api import Error as PlaywrightError
@@ -37,6 +40,15 @@ COPIED_SELECTOR = None
 VPN_LINK_RE = re.compile(r"(?:vless|vmess|trojan|ss|wireguard|wg|https?)://[^\s\"'<>]+", re.I)
 
 
+def configure_packaged_browser_path() -> None:
+    """Use a bundled Playwright browser folder when running as a packaged exe."""
+    app_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    bundled_browsers = app_dir / "ms-playwright"
+
+    if bundled_browsers.exists() and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled_browsers)
+
+
 def parse_args():
     """Read optional command-line overrides, using constants above as defaults."""
     parser = argparse.ArgumentParser(description="Register and print the received VPN/config link.")
@@ -53,6 +65,24 @@ def parse_args():
     parser.add_argument("--link-selector", default=LINK_SELECTOR)
     parser.add_argument("--copied-selector", default=COPIED_SELECTOR)
     return parser.parse_args()
+
+
+def default_settings():
+    """Return the same defaults as parse_args, but without reading CLI arguments."""
+    return SimpleNamespace(
+        url=REGISTER_URL,
+        password=PASSWORD,
+        email_prefix=EMAIL_PREFIX,
+        email_domain=EMAIL_DOMAIN,
+        device_text=DEVICE_TEXT,
+        headful=HEADFUL,
+        timeout_ms=TIMEOUT_MS,
+        email_selector=EMAIL_SELECTOR,
+        password_selector=PASSWORD_SELECTOR,
+        submit_selector=SUBMIT_SELECTOR,
+        link_selector=LINK_SELECTOR,
+        copied_selector=COPIED_SELECTOR,
+    )
 
 
 def generate_email(args) -> str:
@@ -123,8 +153,9 @@ def extract_link(page, args) -> Optional[str]:
     return first_link_from_text(page.locator("body").inner_text())
 
 
-def main() -> int:
-    args = parse_args()
+def run_registration_flow(args, log=print):
+    """Run the browser flow once and return the generated email and found link."""
+    configure_packaged_browser_path()
     email = generate_email(args)
 
     with sync_playwright() as p:
@@ -134,35 +165,45 @@ def main() -> int:
         page.set_default_timeout(args.timeout_ms)
 
         try:
-            print(f"Generated email: {email}")
+            log(f"Generated email: {email}")
 
             # Open the registration page and fill the form.
+            log("Opening registration page...")
             page.goto(args.url, wait_until="domcontentloaded")
             page.locator(args.email_selector).fill(email)
             page.locator(args.password_selector).fill(args.password)
             page.locator(args.submit_selector).click()
 
             # Continue through the post-registration device step.
+            log("Selecting Windows device...")
             click_windows_device(page, args)
+            log("Searching for link...")
             link = extract_link(page, args)
 
             if not link:
                 screenshot = Path("no_vpn_link_found.png").resolve()
                 page.screenshot(path=str(screenshot), full_page=True)
-                print(f"VPN link was not found. Screenshot saved to: {screenshot}")
-                return 2
+                raise RuntimeError(f"VPN link was not found. Screenshot saved to: {screenshot}")
 
             if args.copied_selector:
                 page.locator(args.copied_selector).first.click()
 
-            print(link)
-            return 0
-        except (PlaywrightTimeoutError, RuntimeError) as exc:
-            print(f"Failed to complete registration flow: {exc}")
-            return 1
+            return email, link
         finally:
             # Always close the browser, even if an error happened.
             browser.close()
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        _, link = run_registration_flow(args)
+        print(link)
+        return 0
+    except (PlaywrightTimeoutError, RuntimeError) as exc:
+        print(f"Failed to complete registration flow: {exc}")
+        return 1
 
 
 if __name__ == "__main__":
