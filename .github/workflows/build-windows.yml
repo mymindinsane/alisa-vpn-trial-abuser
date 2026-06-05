@@ -1,0 +1,44 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - gui-develop
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build GUI executable
+        run: |
+          pyinstaller --clean --onedir --windowed --collect-all playwright --name alisa-trial-abuser app_gui.py
+
+      - name: Add run script
+        shell: pwsh
+        run: |
+          @"
+          @echo off
+          start "" "%~dp0alisa-trial-abuser.exe"
+          "@ | Set-Content -Path "dist\alisa-trial-abuser\run-alisa-trial-abuser.bat" -Encoding ASCII
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alisa-trial-abuser-windows
+          path: dist/alisa-trial-abuser

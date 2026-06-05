@@ -1,8 +1,12 @@
 import argparse
+import os
+import subprocess
 import random
 import re
+import sys
 import string
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 from playwright.sync_api import Error as PlaywrightError
@@ -16,6 +20,8 @@ PASSWORD = "Qwerty12345!"
 EMAIL_PREFIX = "qwerty"
 EMAIL_DOMAIN = "mail.ru"
 DEVICE_TEXT = "Windows"
+BROWSER_CHANNEL = "auto"
+DOWNLOAD_CHROMIUM_IF_NEEDED = True
 
 # HEADFUL controls whether the browser window is visible.
 # False = run in the background, True = show Chromium on screen.
@@ -37,6 +43,15 @@ COPIED_SELECTOR = None
 VPN_LINK_RE = re.compile(r"(?:vless|vmess|trojan|ss|wireguard|wg|https?)://[^\s\"'<>]+", re.I)
 
 
+def configure_packaged_browser_path() -> None:
+    """Use a bundled Playwright browser folder when running as a packaged exe."""
+    app_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+    bundled_browsers = app_dir / "ms-playwright"
+
+    if bundled_browsers.exists() and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled_browsers)
+
+
 def parse_args():
     """Read optional command-line overrides, using constants above as defaults."""
     parser = argparse.ArgumentParser(description="Register and print the received VPN/config link.")
@@ -45,6 +60,8 @@ def parse_args():
     parser.add_argument("--email-prefix", default=EMAIL_PREFIX)
     parser.add_argument("--email-domain", default=EMAIL_DOMAIN)
     parser.add_argument("--device-text", default=DEVICE_TEXT)
+    parser.add_argument("--browser-channel", default=BROWSER_CHANNEL, choices=("auto", "msedge", "chrome", "chromium"))
+    parser.add_argument("--no-download-chromium", action="store_false", dest="download_chromium_if_needed", default=DOWNLOAD_CHROMIUM_IF_NEEDED)
     parser.add_argument("--headful", action="store_true", default=HEADFUL)
     parser.add_argument("--timeout-ms", type=int, default=TIMEOUT_MS)
     parser.add_argument("--email-selector", default=EMAIL_SELECTOR)
@@ -53,6 +70,26 @@ def parse_args():
     parser.add_argument("--link-selector", default=LINK_SELECTOR)
     parser.add_argument("--copied-selector", default=COPIED_SELECTOR)
     return parser.parse_args()
+
+
+def default_settings():
+    """Return the same defaults as parse_args, but without reading CLI arguments."""
+    return SimpleNamespace(
+        url=REGISTER_URL,
+        password=PASSWORD,
+        email_prefix=EMAIL_PREFIX,
+        email_domain=EMAIL_DOMAIN,
+        device_text=DEVICE_TEXT,
+        browser_channel=BROWSER_CHANNEL,
+        download_chromium_if_needed=DOWNLOAD_CHROMIUM_IF_NEEDED,
+        headful=HEADFUL,
+        timeout_ms=TIMEOUT_MS,
+        email_selector=EMAIL_SELECTOR,
+        password_selector=PASSWORD_SELECTOR,
+        submit_selector=SUBMIT_SELECTOR,
+        link_selector=LINK_SELECTOR,
+        copied_selector=COPIED_SELECTOR,
+    )
 
 
 def generate_email(args) -> str:
@@ -123,46 +160,135 @@ def extract_link(page, args) -> Optional[str]:
     return first_link_from_text(page.locator("body").inner_text())
 
 
-def main() -> int:
-    args = parse_args()
+def launch_browser(playwright, args, log):
+    """Launch a browser. Download Chromium only after system browsers fail."""
+    headless = not args.headful
+
+    if args.browser_channel == "chromium":
+        return launch_playwright_chromium(playwright, headless, args.download_chromium_if_needed, log)
+
+    browser, errors = try_launch_system_browser(playwright, args.browser_channel, headless, log)
+    if browser:
+        return browser
+
+    if args.download_chromium_if_needed and args.browser_channel == "auto":
+        log("Edge and Chrome are not available. Falling back to Playwright Chromium download.")
+        return launch_playwright_chromium(playwright, headless, True, log)
+
+    raise RuntimeError("Could not launch Microsoft Edge or Google Chrome.\n" + "\n".join(errors))
+
+
+def try_launch_system_browser(playwright, browser_channel, headless, log):
+    """Try installed Edge/Chrome only. Never downloads anything."""
+    channels = ("msedge", "chrome") if browser_channel == "auto" else (browser_channel,)
+    errors = []
+
+    for channel in channels:
+        try:
+            log(f"Trying installed browser: {channel}")
+            return playwright.chromium.launch(channel=channel, headless=headless), errors
+        except PlaywrightError as exc:
+            errors.append(f"{channel}: {exc}")
+
+    return None, errors
+
+
+def launch_playwright_chromium(playwright, headless, download_if_missing, log):
+    """Launch Playwright Chromium, downloading it first only when allowed."""
+    try:
+        log("Trying Playwright Chromium...")
+        return playwright.chromium.launch(headless=headless)
+    except PlaywrightError:
+        if not download_if_missing:
+            raise
+
+        install_playwright_chromium(log)
+        log("Trying Playwright Chromium after download...")
+        return playwright.chromium.launch(headless=headless)
+
+
+def install_playwright_chromium(log):
+    """Download Playwright Chromium on the user's machine."""
+    log("Downloading Playwright Chromium. This can take a few minutes...")
+
+    if getattr(sys, "frozen", False):
+        from playwright.__main__ import main as playwright_main
+
+        old_argv = sys.argv[:]
+        try:
+            sys.argv = ["playwright", "install", "chromium"]
+            try:
+                result = playwright_main()
+            except SystemExit as exc:
+                result = exc.code
+        finally:
+            sys.argv = old_argv
+
+        if result not in (None, 0):
+            raise RuntimeError("Playwright Chromium download failed.")
+        return
+
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=False,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError("Playwright Chromium download failed.")
+
+
+def run_registration_flow(args, log=print):
+    """Run the browser flow once and return the generated email and found link."""
+    configure_packaged_browser_path()
     email = generate_email(args)
 
     with sync_playwright() as p:
-        # Launch Chromium and create a fresh tab/page.
-        browser = p.chromium.launch(headless=not args.headful)
+        # Launch a system browser and create a fresh tab/page.
+        browser = launch_browser(p, args, log)
         page = browser.new_page()
         page.set_default_timeout(args.timeout_ms)
 
         try:
-            print(f"Generated email: {email}")
+            log(f"Generated email: {email}")
 
             # Open the registration page and fill the form.
+            log("Opening registration page...")
             page.goto(args.url, wait_until="domcontentloaded")
             page.locator(args.email_selector).fill(email)
             page.locator(args.password_selector).fill(args.password)
             page.locator(args.submit_selector).click()
 
             # Continue through the post-registration device step.
+            log("Selecting Windows device...")
             click_windows_device(page, args)
+            log("Searching for link...")
             link = extract_link(page, args)
 
             if not link:
                 screenshot = Path("no_vpn_link_found.png").resolve()
                 page.screenshot(path=str(screenshot), full_page=True)
-                print(f"VPN link was not found. Screenshot saved to: {screenshot}")
-                return 2
+                raise RuntimeError(f"VPN link was not found. Screenshot saved to: {screenshot}")
 
             if args.copied_selector:
                 page.locator(args.copied_selector).first.click()
 
-            print(link)
-            return 0
-        except (PlaywrightTimeoutError, RuntimeError) as exc:
-            print(f"Failed to complete registration flow: {exc}")
-            return 1
+            return email, link
         finally:
             # Always close the browser, even if an error happened.
             browser.close()
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        _, link = run_registration_flow(args)
+        print(link)
+        return 0
+    except (PlaywrightTimeoutError, RuntimeError) as exc:
+        print(f"Failed to complete registration flow: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

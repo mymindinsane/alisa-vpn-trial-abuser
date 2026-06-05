@@ -1,149 +1,83 @@
-# Alisa Trial Abuse Tester
 
-Command-line version of Alisa Trial Abuse Tester.
+# Alisa Trial Abuser
 
-It opens a registration page in Chromium, fills in an email and password,
-selects the Windows option, and prints the received VPN link in the terminal.
+This app opens a registration page, fills in the required details, selects
+Windows, and shows the received VPN link in the app window.
 
 ## Important
 
-This project is provided for educational purposes and must be used only on
-websites, systems, and accounts where you have permission to automate the flow.
-Do not use it to bypass service limits, violate service rules, create
-unauthorized accounts, or access anything without permission.
+This app is provided for educational purposes and must be used only on websites,
+systems, and accounts where you have permission to automate the flow. Do not use
+it to bypass limits, violate service rules, or access anything without
+permission.
 
-## Requirements
+## How To Start
 
-- Python 3.9 or newer
-- Playwright for Python
-- Playwright Chromium
-
-## Installation
-
-Create and activate a virtual environment:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```powershell
-pip install playwright
-python -m playwright install chromium
-```
-
-## Run
-
-Start with the default settings:
-
-```powershell
-python .\register_vpn_link.py
-```
-
-Example output:
+Unzip the app archive and open:
 
 ```text
-Generated email: qwerty_ab12cd34@mail.ru
-https://sub.example.com/example_link
+alisa-trial-abuser.exe
 ```
 
-The first line is the generated email. The second line is the received link.
+The app first tries to use Microsoft Edge. If Edge is not available, it tries
+Google Chrome. If neither browser is available, the app can download Playwright
+Chromium on this computer.
 
-## Show The Browser
+## How To Use
 
-Use `--headful` to see the browser window while the script is running:
+1. Open `alisa-trial-abuser.exe`.
+2. Check the fields in the `Settings` section.
+3. Enable `Show browser window` if you want to see the browser.
+4. Click `Start`.
+5. Wait for the result.
+6. Click `Copy link` to copy the link.
 
-```powershell
-python .\register_vpn_link.py --headful
-```
+## Window Fields
 
-This is useful when you want to see where the flow stops.
+`URL` - registration page address.
 
-## Override Settings
+`Password` - password entered into the form.
 
-The script has default values inside `register_vpn_link.py`, but you can
-override them for one run.
+`Email prefix` - beginning of the generated email address.
 
-Use another password:
+`Email domain` - domain of the generated email address.
 
-```powershell
-python .\register_vpn_link.py --password "AnotherPassword123"
-```
+`Device text` - text used to select the Windows option.
 
-Use another email domain:
+`Browser` - browser used by the app. `auto` tries Edge first, then Chrome.
 
-```powershell
-python .\register_vpn_link.py --email-domain "mail.com"
-```
+`Show browser window` - shows the browser while the app is running.
 
-Override several values:
+`Download Chromium if needed` - downloads Playwright Chromium if Edge and Chrome
+are not available. Internet connection is required for this download.
 
-```powershell
-python .\register_vpn_link.py `
-  --email-prefix "qwerty" `
-  --email-domain "mail.com" `
-  --device-text "Windows" `
-  --timeout-ms 45000
-```
+`Timeout ms` - maximum wait time for page actions.
 
-## Parameters
+`Link selector` - can be left empty. Use it only when the link must be read from
+a specific page field.
 
-All parameters are optional.
+## Result
 
-| Parameter | Meaning |
-| --- | --- |
-| `--url` | Registration page URL |
-| `--password` | Password entered into the form |
-| `--email-prefix` | Prefix used for the generated email |
-| `--email-domain` | Domain used for the generated email |
-| `--device-text` | Text used to select the Windows option |
-| `--headful` | Shows the browser window |
-| `--timeout-ms` | Maximum wait time for page actions |
-| `--email-selector` | Selector for the email field |
-| `--password-selector` | Selector for the password field |
-| `--submit-selector` | Selector for the submit button |
-| `--link-selector` | Optional selector for the link field |
-| `--copied-selector` | Optional selector for an extra button after the link step |
+After a successful run, the `Result` section shows:
 
-## Link Search
+`Generated email` - the email address used by the app.
 
-If `--link-selector` is not set, the script searches for a link in:
+`Link` - the VPN link found by the app.
 
-- `input`
-- `textarea`
-- `code`
-- `pre`
-- `a`
-- visible page text
+The `Copy link` button copies the link to your clipboard.
 
-If the link is always inside a known element, pass the selector:
+## If Something Goes Wrong
 
-```powershell
-python .\register_vpn_link.py --link-selector "input"
-```
+Enable `Show browser window` and run the app again. This helps you see where the
+flow stops.
 
-## Troubleshooting
-
-If the Windows option is not found, the script saves:
+If the app cannot find the expected screen or link, it may create a screenshot
+next to the app:
 
 ```text
 no_windows_card_found.png
-```
-
-If the link is not found, the script saves:
-
-```text
 no_vpn_link_found.png
 ```
 
-Open the screenshot to see what was displayed in the browser when the error
+Use the screenshot to check what was visible in the browser when the error
 happened.
-
-## License
-
-MIT License is a common choice for a small script like this.
-
-Important: a license does not make improper use legal. It only describes how
-others may copy, modify, and distribute the code.
