@@ -1,0 +1,66 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chromium for Playwright
+        run: |
+          python -m playwright install chromium
+
+      - name: Find Playwright browser cache
+        id: browsers
+        shell: pwsh
+        run: |
+          $cache = Join-Path $env:USERPROFILE "AppData\Local\ms-playwright"
+          if (!(Test-Path $cache)) {
+            throw "Playwright browser cache was not found at $cache"
+          }
+          "path=$cache" >> $env:GITHUB_OUTPUT
+
+      - name: Build GUI executable
+        run: |
+          pyinstaller --clean --onedir --windowed --collect-all playwright --name vpn-link-gui app_gui.py
+
+      - name: Bundle Playwright browsers
+        shell: pwsh
+        run: |
+          Copy-Item `
+            -Path "${{ steps.browsers.outputs.path }}" `
+            -Destination "dist\vpn-link-gui\ms-playwright" `
+            -Recurse
+
+      - name: Add run script
+        shell: pwsh
+        run: |
+          @"
+          @echo off
+          set PLAYWRIGHT_BROWSERS_PATH=%~dp0ms-playwright
+          start "" "%~dp0vpn-link-gui.exe"
+          "@ | Set-Content -Path "dist\vpn-link-gui\run-gui.bat" -Encoding ASCII
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-link-gui-windows
+          path: dist/vpn-link-gui

@@ -1,0 +1,9 @@
+.venv/
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+vpn_link.txt
+no_windows_card_found.png
+no_vpn_link_found.png
